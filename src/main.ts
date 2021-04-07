@@ -1,4 +1,14 @@
-import { cac, exists, printf } from "./deps.ts";
+import {
+  exists,
+  printf,
+  args,
+  BinaryFlag,
+  DrainOption,
+  EarlyExitFlag,
+  FiniteNumber,
+  DRAIN_UNTIL_FLAG,
+  MAIN_COMMAND,
+} from "./deps.ts";
 import {
   getAverage,
   getMaximum,
@@ -7,65 +17,109 @@ import {
   getPercentile,
 } from "./func.ts";
 
-const piped = !Deno.isatty(Deno.stdin.rid);
-const cli = cac("opstats");
+const parser = args
+  .with(
+    EarlyExitFlag("help", {
+      alias: ["h", "?"],
+      describe: "Display help",
+      exit() {
+        console.log("USAGE:");
+        console.log("  opstats [flags] <file>");
+        console.log("  cat <file> | opstats [flags]");
+        console.log();
+        console.log(parser.help());
+        Deno.exit(0);
+      },
+    })
+  )
+  .with(
+    BinaryFlag("min", {
+      describe: "Display minimum value",
+    })
+  )
+  .with(
+    BinaryFlag("max", {
+      describe: "Display maximum value",
+    })
+  )
+  .with(
+    BinaryFlag("avg", {
+      describe: "Display average value",
+    })
+  )
+  .with(
+    BinaryFlag("med", {
+      describe: "Display median value",
+    })
+  )
+  .with(
+    DrainOption("per", {
+      type: FiniteNumber,
+      while: DRAIN_UNTIL_FLAG,
+      describe: "Display percentiles",
+    })
+  );
 
-cli.option("--min", "Display minimum output");
-cli.option("--max", "Display maximum output");
-cli.option("--avg", "Display average output");
-cli.option("--med", "Display median output");
-cli.option("--per [percentage]", "Display percentile output");
-cli.usage("[options] <file>");
-cli.help();
+const argv = parser.parse(Deno.args);
 
-const { args, options } = cli.parse();
-
-// helpフラグが渡された場合はヘルプを表示して正常終了
-if (options.help || options.h) {
-  Deno.exit(0);
+// パースした引数のバリデーション
+if (argv.tag !== MAIN_COMMAND) {
+  console.error(argv.error.toString());
+  Deno.exit(1);
 }
+if (argv.remaining().rawFlags().length) {
+  console.error(
+    "Error: Unknown flags specified.",
+    ...argv.remaining().rawFlags()
+  );
+  Deno.exit(1);
+}
+
+const { remaining, value } = argv;
 
 let list: number[];
 
-if (piped) {
+if (Deno.isatty(Deno.stdin.rid)) {
+  // パイプからの入力でない場合はファイルから読み込み
+  if (!remaining().rawValues().length) {
+    console.error("Error: Must specify an input file.");
+    Deno.exit(1);
+  }
+  const [file] = remaining().rawValues();
+  if (!(await exists(file))) {
+    console.error("Error: Input file not found.");
+    Deno.exit(1);
+  }
+  const data = await Deno.readTextFile(file);
+  list = data.split("\n").filter(Boolean).map(parseFloat).sort();
+} else {
   // パイプから入力された場合は内容を全読み込み
   const input = await Deno.readAll(Deno.stdin);
   const data = new TextDecoder().decode(input);
   list = data.split("\n").filter(Boolean).map(parseFloat).sort();
-} else {
-  // ファイルがpositionalな引数で渡された場合はファイルをテキストとして読み込み
-  const filePath = String(args[0]);
-  if (!(await exists(filePath))) {
-    console.error("[ERROR] No filepath found.");
-    Deno.exit(1);
-  }
-  const data = await Deno.readTextFile(filePath);
-  list = data.split("\n").filter(Boolean).map(parseFloat).sort();
 }
 
-if (options.min || options.max || options.avg || options.med || options.per) {
-  // オプション指定あり -> 指定ありオプションのみ出力
-  if (options.min) {
+if (value.min || value.max || value.avg || value.med || value.per.length) {
+  // フラグ指定がひとつでもある場合
+  if (value.min) {
     printf("Min %6.6f\n", getMinimum(list));
   }
-  if (options.max) {
+  if (value.max) {
     printf("Max %6.6f\n", getMaximum(list));
   }
-  if (options.avg) {
+  if (value.avg) {
     printf("Avg %6.6f\n", getAverage(list));
   }
-  if (options.med) {
+  if (value.med) {
     printf("Med %6.6f\n", getMedian(list));
   }
-  if (Array.isArray(options.per)) {
-    for (const n of options.per) {
+  if (value.per.length) {
+    for (const n of value.per) {
       printf("%2d%% %6.6f\n", n, getPercentile(list, n));
     }
-  } else {
-    printf("%2d%% %6.6f\n", options.per, getPercentile(list, options.per));
   }
 } else {
-  // オプション指定なし=デフォルト -> 全オプション出力
+  // フラグ指定なし
   printf("Min %6.6f\n", getMinimum(list));
   printf("Max %6.6f\n", getMaximum(list));
   printf("Avg %6.6f\n", getAverage(list));
