@@ -1,3 +1,4 @@
+export { assertEquals } from "https://deno.land/std@0.88.0/testing/asserts.ts";
 export { printf } from "https://deno.land/std@0.92.0/fmt/printf.ts";
 export { exists } from "https://deno.land/std@0.92.0/fs/exists.ts";
 export { args } from "https://deno.land/x/args@2.1.0/wrapper.ts";
