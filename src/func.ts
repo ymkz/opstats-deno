@@ -1,4 +1,4 @@
-import { exists, printf } from "./deps.ts";
+import { exists, printf, readAll } from "./deps.ts";
 import { Flags } from "./types.ts";
 
 export function getMaximum(data: number[]): number {
@@ -58,7 +58,7 @@ export async function readData(file: string): Promise<number[]> {
     return data.split("\n").filter(Boolean).map(parseFloat).sort();
   } else {
     // パイプから入力された場合は内容を全読み込み
-    const input = await Deno.readAll(Deno.stdin);
+    const input = await readAll(Deno.stdin);
     const data = new TextDecoder().decode(input);
     return data.split("\n").filter(Boolean).map(parseFloat).sort();
   }
