@@ -14,6 +14,8 @@ jobs:
       - uses: denoland/setup-deno@main
         with:
           deno-version: v1.x
-      - run: make dev
+      - run: make dev-file
+      - run: make dev-pipe
+      - run: make lint
       - run: make test
       - run: make build
